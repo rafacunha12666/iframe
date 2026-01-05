@@ -97,3 +97,14 @@ button:hover {
   font-size: 14px;
   color: var(--muted);
 }
+
+pre {
+  margin: 10px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f3efe8;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

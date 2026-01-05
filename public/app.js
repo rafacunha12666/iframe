@@ -1,6 +1,7 @@
 const pingBtn = document.getElementById('pingBtn');
 const pingResult = document.getElementById('pingResult');
 const contactNameEl = document.getElementById('contactName');
+const postMessageEl = document.getElementById('postMessagePayload');
 
 const setContactName = (name) => {
   if (!contactNameEl) {
@@ -14,6 +15,17 @@ const setContactName = (name) => {
     return;
   }
   contactNameEl.textContent = trimmed;
+};
+
+const setPostMessagePayload = (payload) => {
+  if (!postMessageEl) {
+    return;
+  }
+  try {
+    postMessageEl.textContent = JSON.stringify(payload, null, 2);
+  } catch (err) {
+    postMessageEl.textContent = String(payload);
+  }
 };
 
 const extractContactName = (payload) => {
@@ -70,9 +82,11 @@ window.addEventListener('message', (event) => {
     try {
       data = JSON.parse(data);
     } catch (err) {
+      setPostMessagePayload(event.data);
       return;
     }
   }
+  setPostMessagePayload(data);
   const name = extractContactName(data);
   if (name) {
     setContactName(name);
