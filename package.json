@@ -1,0 +1,13 @@
+﻿{
+  "name": "chatwoot-dashboard-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple Chatwoot dashboard app (static)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
