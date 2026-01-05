@@ -150,22 +150,60 @@ const normalizePayload = (payload) => {
 
 const updateFields = (payload) => {
   const normalized = normalizePayload(payload);
-  const contact = normalized.contact || getNested(normalized, 'data.contact') || {};
-  const conversation = normalized.conversation || getNested(normalized, 'data.conversation') || {};
+  const contact =
+    normalized.contact ||
+    getNested(normalized, 'data.contact') ||
+    getNested(normalized, 'conversation.meta.sender') ||
+    {};
+  const conversation =
+    normalized.conversation || getNested(normalized, 'data.conversation') || {};
   const account = normalized.account || getNested(normalized, 'data.account') || {};
   const inbox = normalized.inbox || getNested(normalized, 'data.inbox') || {};
 
   setText(contactIdEl, pickFirst(contact.id, normalized.contact_id));
   setText(contactEmailEl, pickFirst(contact.email, normalized.contact_email));
-  setText(contactPhoneEl, pickFirst(contact.phone_number, normalized.contact_phone_number));
-  setText(contactAvatarEl, pickFirst(contact.avatar_url, normalized.contact_avatar_url));
+  setText(
+    contactPhoneEl,
+    pickFirst(contact.phone_number, normalized.contact_phone_number)
+  );
+  setText(
+    contactAvatarEl,
+    pickFirst(
+      contact.avatar_url,
+      pickFirst(contact.thumbnail, normalized.contact_avatar_url)
+    )
+  );
   setText(conversationIdEl, pickFirst(conversation.id, normalized.conversation_id));
-  setText(conversationStatusEl, pickFirst(conversation.status, normalized.conversation_status));
-  setText(conversationInboxIdEl, pickFirst(conversation.inbox_id, normalized.conversation_inbox_id));
-  setText(accountIdEl, pickFirst(account.id, normalized.account_id));
-  setText(inboxIdEl, pickFirst(inbox.id, normalized.inbox_id));
-  setText(contactCustomAttributesEl, contact.custom_attributes || normalized.custom_attributes);
-  setText(contactLabelsEl, contact.labels || contact.tags || normalized.labels || normalized.tags);
+  setText(
+    conversationStatusEl,
+    pickFirst(conversation.status, normalized.conversation_status)
+  );
+  setText(
+    conversationInboxIdEl,
+    pickFirst(conversation.inbox_id, normalized.conversation_inbox_id)
+  );
+  setText(
+    accountIdEl,
+    pickFirst(account.id, pickFirst(conversation.account_id, normalized.account_id))
+  );
+  setText(
+    inboxIdEl,
+    pickFirst(inbox.id, pickFirst(conversation.inbox_id, normalized.inbox_id))
+  );
+  setText(
+    contactCustomAttributesEl,
+    contact.custom_attributes ||
+      getNested(normalized, 'conversation.meta.sender.custom_attributes') ||
+      normalized.custom_attributes
+  );
+  setText(
+    contactLabelsEl,
+    conversation.labels ||
+      contact.labels ||
+      contact.tags ||
+      normalized.labels ||
+      normalized.tags
+  );
 };
 
 const initialName = readNameFromQuery();
