@@ -58,6 +58,11 @@ p {
   color: var(--muted);
 }
 
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .content {
   display: grid;
   gap: 16px;
@@ -107,4 +112,15 @@ pre {
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.kv span {
+  color: var(--muted);
 }
