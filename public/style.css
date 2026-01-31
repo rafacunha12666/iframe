@@ -124,3 +124,11 @@ pre {
 .kv span {
   color: var(--muted);
 }
+
+canvas {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #f3efe8;
+  margin-top: 10px;
+}

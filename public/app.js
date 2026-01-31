@@ -14,10 +14,119 @@ const accountIdEl = document.getElementById('accountId');
 const inboxIdEl = document.getElementById('inboxId');
 const contactCustomAttributesEl = document.getElementById('contactCustomAttributes');
 const contactLabelsEl = document.getElementById('contactLabels');
+const contactCanvas = document.getElementById('contactCanvas');
+const contactCanvasCtx = contactCanvas ? contactCanvas.getContext('2d') : null;
 
 const allowedOrigins = new Set([
   'https://app.chatwoot.com',
 ]);
+
+let currentContactName = 'Nao informado';
+let currentAvatarUrl = null;
+let avatarImage = null;
+let avatarImageUrl = null;
+
+const getInitials = (name) => {
+  if (!name || typeof name !== 'string') {
+    return '?';
+  }
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return '?';
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+};
+
+const drawCanvas = () => {
+  if (!contactCanvasCtx || !contactCanvas) {
+    return;
+  }
+  const { width, height } = contactCanvas;
+  contactCanvasCtx.clearRect(0, 0, width, height);
+
+  contactCanvasCtx.fillStyle = '#f3efe8';
+  contactCanvasCtx.fillRect(0, 0, width, height);
+
+  const centerX = 64;
+  const centerY = height / 2;
+  const radius = 42;
+
+  contactCanvasCtx.save();
+  contactCanvasCtx.beginPath();
+  contactCanvasCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  contactCanvasCtx.closePath();
+  contactCanvasCtx.clip();
+
+  if (avatarImage && avatarImage.complete) {
+    contactCanvasCtx.drawImage(
+      avatarImage,
+      centerX - radius,
+      centerY - radius,
+      radius * 2,
+      radius * 2
+    );
+  } else {
+    contactCanvasCtx.fillStyle = '#e85d3f';
+    contactCanvasCtx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+  }
+  contactCanvasCtx.restore();
+
+  contactCanvasCtx.strokeStyle = '#e5e0d8';
+  contactCanvasCtx.lineWidth = 2;
+  contactCanvasCtx.beginPath();
+  contactCanvasCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  contactCanvasCtx.stroke();
+
+  if (!avatarImage || !avatarImage.complete) {
+    contactCanvasCtx.fillStyle = '#ffffff';
+    contactCanvasCtx.font = '600 22px "Space Grotesk", "Segoe UI", sans-serif';
+    contactCanvasCtx.textAlign = 'center';
+    contactCanvasCtx.textBaseline = 'middle';
+    contactCanvasCtx.fillText(getInitials(currentContactName), centerX, centerY);
+  }
+
+  contactCanvasCtx.fillStyle = '#1c1b1a';
+  contactCanvasCtx.font = '600 18px "Space Grotesk", "Segoe UI", sans-serif';
+  contactCanvasCtx.textAlign = 'left';
+  contactCanvasCtx.textBaseline = 'alphabetic';
+  contactCanvasCtx.fillText('Contato', 130, 70);
+
+  contactCanvasCtx.fillStyle = '#6d6a65';
+  contactCanvasCtx.font = '14px "Space Grotesk", "Segoe UI", sans-serif';
+  contactCanvasCtx.fillText(currentContactName || 'Nao informado', 130, 96);
+};
+
+const loadAvatar = (url) => {
+  if (!url) {
+    avatarImage = null;
+    avatarImageUrl = null;
+    drawCanvas();
+    return;
+  }
+  if (url === avatarImageUrl && avatarImage) {
+    drawCanvas();
+    return;
+  }
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    avatarImage = img;
+    avatarImageUrl = url;
+    drawCanvas();
+  };
+  img.onerror = () => {
+    avatarImage = null;
+    avatarImageUrl = null;
+    drawCanvas();
+  };
+  img.src = url;
+};
 
 const setContactName = (name) => {
   if (!contactNameEl) {
@@ -30,7 +139,9 @@ const setContactName = (name) => {
   if (trimmed.length === 0) {
     return;
   }
+  currentContactName = trimmed;
   contactNameEl.textContent = trimmed;
+  drawCanvas();
 };
 
 const setPostMessagePayload = (payload) => {
@@ -173,6 +284,11 @@ const updateFields = (payload) => {
       pickFirst(contact.thumbnail, normalized.contact_avatar_url)
     )
   );
+  currentAvatarUrl = pickFirst(
+    contact.avatar_url,
+    pickFirst(contact.thumbnail, normalized.contact_avatar_url)
+  );
+  loadAvatar(currentAvatarUrl);
   setText(conversationIdEl, pickFirst(conversation.id, normalized.conversation_id));
   setText(
     conversationStatusEl,
@@ -210,6 +326,7 @@ const initialName = readNameFromQuery();
 if (initialName) {
   setContactName(initialName);
 }
+drawCanvas();
 
 window.addEventListener('message', (event) => {
   if (event.origin && !allowedOrigins.has(event.origin)) {
