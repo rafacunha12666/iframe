@@ -14,17 +14,62 @@ const accountIdEl = document.getElementById('accountId');
 const inboxIdEl = document.getElementById('inboxId');
 const contactCustomAttributesEl = document.getElementById('contactCustomAttributes');
 const contactLabelsEl = document.getElementById('contactLabels');
+
 const contactCanvas = document.getElementById('contactCanvas');
 const contactCanvasCtx = contactCanvas ? contactCanvas.getContext('2d') : null;
+
+const kanbanBoardEl = document.getElementById('kanbanBoard');
+const clearBoardBtn = document.getElementById('clearBoardBtn');
+const kanbanSearchEl = document.getElementById('kanbanSearch');
 
 const allowedOrigins = new Set([
   'https://app.chatwoot.com',
 ]);
 
+const STORAGE_KEY = 'kanban_funil_de_vendas_v1';
+
 let currentContactName = 'Nao informado';
-let currentAvatarUrl = null;
 let avatarImage = null;
 let avatarImageUrl = null;
+
+// Optional: define preferred ordering for common stages.
+const PREFERRED_STAGES = [
+  'novo',
+  'lead',
+  'qualificacao',
+  'contato',
+  'proposta',
+  'negociacao',
+  'ganho',
+  'perdido',
+];
+
+const loadBoardState = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return { contacts: {} };
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !parsed.contacts) {
+      return { contacts: {} };
+    }
+    return { contacts: parsed.contacts || {} };
+  } catch (err) {
+    return { contacts: {} };
+  }
+};
+
+const saveBoardState = (state) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (err) {
+    // ignore
+  }
+};
+
+let boardState = loadBoardState();
+let kanbanFilter = '';
 
 const getInitials = (name) => {
   if (!name || typeof name !== 'string') {
@@ -73,7 +118,12 @@ const drawCanvas = () => {
     );
   } else {
     contactCanvasCtx.fillStyle = '#e85d3f';
-    contactCanvasCtx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    contactCanvasCtx.fillRect(
+      centerX - radius,
+      centerY - radius,
+      radius * 2,
+      radius * 2
+    );
   }
   contactCanvasCtx.restore();
 
@@ -231,6 +281,14 @@ const pickFirst = (value, fallback) => {
   return fallback;
 };
 
+const toNonEmptyString = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const s = String(value).trim();
+  return s.length ? s : null;
+};
+
 const getNested = (root, path) => {
   if (!root) {
     return undefined;
@@ -259,6 +317,203 @@ const normalizePayload = (payload) => {
   return payload;
 };
 
+const extractContactId = (normalized) => {
+  const contact =
+    normalized.contact ||
+    getNested(normalized, 'data.contact') ||
+    getNested(normalized, 'conversation.meta.sender') ||
+    {};
+
+  const candidates = [
+    contact.id,
+    normalized.contact_id,
+    getNested(normalized, 'conversation.meta.sender.id'),
+    getNested(normalized, 'data.contact_id'),
+  ];
+
+  for (const c of candidates) {
+    const s = toNonEmptyString(c);
+    if (s) {
+      return s;
+    }
+  }
+  return null;
+};
+
+const extractFunilStage = (normalized) => {
+  const contact =
+    normalized.contact ||
+    getNested(normalized, 'data.contact') ||
+    getNested(normalized, 'conversation.meta.sender') ||
+    {};
+
+  const candidates = [
+    getNested(contact, 'custom_attributes.funil_de_vendas'),
+    getNested(normalized, 'custom_attributes.funil_de_vendas'),
+    getNested(normalized, 'conversation.meta.sender.custom_attributes.funil_de_vendas'),
+    getNested(normalized, 'contact.custom_attributes.funil_de_vendas'),
+  ];
+
+  for (const c of candidates) {
+    const s = toNonEmptyString(c);
+    if (s) {
+      return s;
+    }
+  }
+  return null;
+};
+
+const upsertKanbanContact = (normalized) => {
+  const id = extractContactId(normalized);
+  if (!id) {
+    return;
+  }
+
+  const name = extractContactName(normalized);
+  const stageFromPayload = extractFunilStage(normalized);
+  const existing = boardState.contacts[id] || {};
+
+  // If the user dragged the card before, keep that stage; otherwise use payload stage.
+  const stage = toNonEmptyString(existing.stage) || stageFromPayload || 'Sem funil';
+
+  boardState.contacts[id] = {
+    id,
+    name: toNonEmptyString(name) || existing.name || null,
+    stage,
+    updatedAt: Date.now(),
+  };
+
+  saveBoardState(boardState);
+};
+
+const getStageOrderKey = (stage) => {
+  const idx = PREFERRED_STAGES.indexOf(String(stage).toLowerCase());
+  if (idx !== -1) {
+    return `0_${String(idx).padStart(3, '0')}`;
+  }
+  if (stage === 'Sem funil') {
+    return '0_000';
+  }
+  return `1_${String(stage).toLowerCase()}`;
+};
+
+const getStagesFromState = () => {
+  const stages = new Set(['Sem funil']);
+  for (const id of Object.keys(boardState.contacts || {})) {
+    const s = toNonEmptyString(boardState.contacts[id].stage) || 'Sem funil';
+    stages.add(s);
+  }
+  return Array.from(stages).sort((a, b) => {
+    const ka = getStageOrderKey(a);
+    const kb = getStageOrderKey(b);
+    return ka.localeCompare(kb);
+  });
+};
+
+const matchesFilter = (contact) => {
+  if (!kanbanFilter) {
+    return true;
+  }
+  const needle = kanbanFilter.toLowerCase();
+  const hay = `${contact.id} ${contact.name || ''} ${contact.stage || ''}`.toLowerCase();
+  return hay.includes(needle);
+};
+
+const renderKanban = () => {
+  if (!kanbanBoardEl) {
+    return;
+  }
+
+  const stages = getStagesFromState();
+  const contacts = Object.values(boardState.contacts || {})
+    .filter((c) => c && c.id)
+    .filter(matchesFilter)
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  kanbanBoardEl.innerHTML = '';
+
+  for (const stage of stages) {
+    const col = document.createElement('section');
+    col.className = 'col';
+    col.setAttribute('data-stage', stage);
+
+    const header = document.createElement('div');
+    header.className = 'colHeader';
+
+    const count = contacts.filter((c) => (c.stage || 'Sem funil') === stage).length;
+    header.innerHTML = `<p class="colTitle"><strong>${stage}</strong><code>${count}</code></p>`;
+
+    const zone = document.createElement('div');
+    zone.className = 'dropzone';
+    zone.setAttribute('data-stage', stage);
+
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      zone.classList.add('over');
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('over');
+      const contactId = e.dataTransfer ? e.dataTransfer.getData('text/plain') : null;
+      if (!contactId) {
+        return;
+      }
+      if (!boardState.contacts[contactId]) {
+        return;
+      }
+      boardState.contacts[contactId].stage = stage;
+      boardState.contacts[contactId].updatedAt = Date.now();
+      saveBoardState(boardState);
+      renderKanban();
+    });
+
+    const stageContacts = contacts.filter((c) => (c.stage || 'Sem funil') === stage);
+    if (stageContacts.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Vazio';
+      zone.appendChild(empty);
+    } else {
+      for (const c of stageContacts) {
+        const card = document.createElement('article');
+        card.className = 'cardItem';
+        card.setAttribute('draggable', 'true');
+        card.setAttribute('data-id', c.id);
+        card.addEventListener('dragstart', (e) => {
+          if (!e.dataTransfer) {
+            return;
+          }
+          e.dataTransfer.setData('text/plain', c.id);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+
+        const top = document.createElement('div');
+        top.className = 'cardTop';
+        const left = document.createElement('strong');
+        left.textContent = c.id;
+        const pill = document.createElement('span');
+        pill.className = 'pill';
+        pill.textContent = 'contact.id';
+        top.appendChild(left);
+        top.appendChild(pill);
+
+        const name = document.createElement('p');
+        name.className = 'cardName';
+        name.textContent = c.name || 'Nome nao informado';
+
+        card.appendChild(top);
+        card.appendChild(name);
+        zone.appendChild(card);
+      }
+    }
+
+    col.appendChild(header);
+    col.appendChild(zone);
+    kanbanBoardEl.appendChild(col);
+  }
+};
+
 const updateFields = (payload) => {
   const normalized = normalizePayload(payload);
   const contact =
@@ -277,18 +532,15 @@ const updateFields = (payload) => {
     contactPhoneEl,
     pickFirst(contact.phone_number, normalized.contact_phone_number)
   );
-  setText(
-    contactAvatarEl,
-    pickFirst(
-      contact.avatar_url,
-      pickFirst(contact.thumbnail, normalized.contact_avatar_url)
-    )
-  );
-  currentAvatarUrl = pickFirst(
+  const avatarUrl = pickFirst(
     contact.avatar_url,
     pickFirst(contact.thumbnail, normalized.contact_avatar_url)
   );
-  loadAvatar(currentAvatarUrl);
+  setText(contactAvatarEl, avatarUrl);
+  const avatarString = toNonEmptyString(avatarUrl);
+  if (avatarString !== avatarImageUrl) {
+    loadAvatar(avatarString);
+  }
   setText(conversationIdEl, pickFirst(conversation.id, normalized.conversation_id));
   setText(
     conversationStatusEl,
@@ -326,7 +578,9 @@ const initialName = readNameFromQuery();
 if (initialName) {
   setContactName(initialName);
 }
+
 drawCanvas();
+renderKanban();
 
 window.addEventListener('message', (event) => {
   if (event.origin && !allowedOrigins.has(event.origin)) {
@@ -348,6 +602,10 @@ window.addEventListener('message', (event) => {
   }
   setPostMessagePayload(data);
   updateFields(data);
+  const normalized = normalizePayload(data);
+  upsertKanbanContact(normalized);
+  renderKanban();
+
   const name = extractContactName(data);
   if (name) {
     setContactName(name);
@@ -363,3 +621,22 @@ pingBtn.addEventListener('click', async () => {
     pingResult.textContent = 'Erro';
   }
 });
+
+if (kanbanSearchEl) {
+  kanbanSearchEl.addEventListener('input', (e) => {
+    kanbanFilter = (e.target && e.target.value ? String(e.target.value) : '').trim();
+    renderKanban();
+  });
+}
+
+if (clearBoardBtn) {
+  clearBoardBtn.addEventListener('click', () => {
+    boardState = { contacts: {} };
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      // ignore
+    }
+    renderKanban();
+  });
+}

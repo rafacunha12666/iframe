@@ -25,6 +25,24 @@
         </div>
 
         <div class="block">
+          <div class="row">
+            <h2>Kanban (funil_de_vendas)</h2>
+            <div class="actions">
+              <input id="kanbanSearch" type="search" placeholder="Filtrar por id/nome..." />
+              <button id="clearBoardBtn" class="btn-secondary" type="button">
+                Limpar board
+              </button>
+            </div>
+          </div>
+          <p class="muted">
+            Mostra contatos vistos via postMessage e agrupa por
+            <code>custom_attributes.funil_de_vendas</code>. Arraste cards entre colunas
+            (salva localmente).
+          </p>
+          <div id="kanbanBoard" class="kanban" aria-label="Kanban funil de vendas"></div>
+        </div>
+
+        <div class="block">
           <h2>Dados</h2>
           <div class="kv">
             <span>contact.id</span><strong id="contactId">Nao informado</strong>
