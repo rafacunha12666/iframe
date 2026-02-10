@@ -3,6 +3,7 @@ const statusEl = document.getElementById('status');
 const errorEl = document.getElementById('error');
 const refreshBtn = document.getElementById('refresh');
 const filterEl = document.getElementById('filter');
+const trashDropEl = document.getElementById('trashDrop');
 
 const STORAGE_COL_ORDER = 'kanban_col_order_v1';
 
@@ -72,6 +73,8 @@ let filterQuery = '';
 let colOrder = readColOrder();
 const expandedIds = new Set();
 const pendingIds = new Set();
+
+const LOST_STAGE = 'Venda Perdida';
 
 const setStatus = (msg) => {
   if (!statusEl) return;
@@ -151,17 +154,42 @@ const setContactStageLocal = (contactId, stage) => {
   }
 };
 
-const moveContactServer = async (contactId, stage) => {
+const moveContactServer = async (contactId, stage, previousStage) => {
   const res = await fetch(`/api/contacts/${encodeURIComponent(contactId)}/move`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ stage }),
+    body: JSON.stringify({ stage, previousStage }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(body && body.error ? body.error : `Erro (${res.status})`);
   }
   return body;
+};
+
+const doMove = async ({ contactId, fromStage, toStage }) => {
+  if (!contactId) return;
+  if (pendingIds.has(contactId)) return;
+  if (normalizeStage(fromStage) === normalizeStage(toStage)) return;
+
+  pendingIds.add(contactId);
+  const previous = normalizeStage(fromStage);
+  setContactStageLocal(contactId, toStage);
+  setStatus(`Atualizando #${contactId} para "${toStage}"...`);
+  setError('');
+  render();
+
+  try {
+    await moveContactServer(contactId, toStage, fromStage);
+    setStatus(`Atualizado: ${new Date().toLocaleString()}`);
+  } catch (err) {
+    setContactStageLocal(contactId, previous === 'Sem funil' ? null : previous);
+    setError(err && err.message ? err.message : 'Falha ao atualizar');
+    setStatus('');
+  } finally {
+    pendingIds.delete(contactId);
+    render();
+  }
 };
 
 const render = () => {
@@ -244,37 +272,7 @@ const render = () => {
       const contactId = e.dataTransfer ? e.dataTransfer.getData('text/plain') : '';
       const fromStage = e.dataTransfer ? e.dataTransfer.getData('text/x-kanban-from') : '';
       if (!contactId) return;
-      if (normalizeStage(fromStage) === normalizeStage(stage)) return;
-      if (pendingIds.has(contactId)) return;
-
-      pendingIds.add(contactId);
-      const previous = normalizeStage(fromStage);
-      setContactStageLocal(contactId, stage);
-      setStatus(`Atualizando #${contactId} para "${stage}"...`);
-      setError('');
-      render();
-
-      try {
-        await fetch(`/api/contacts/${encodeURIComponent(contactId)}/move`, {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ stage, previousStage: fromStage }),
-        }).then(async (r) => {
-          const b = await r.json().catch(() => ({}));
-          if (!r.ok) {
-            throw new Error(b && b.error ? b.error : `Erro (${r.status})`);
-          }
-          return b;
-        });
-        setStatus(`Atualizado: ${new Date().toLocaleString()}`);
-      } catch (err) {
-        setContactStageLocal(contactId, previous === 'Sem funil' ? null : previous);
-        setError(err && err.message ? err.message : 'Falha ao atualizar');
-        setStatus('');
-      } finally {
-        pendingIds.delete(contactId);
-        render();
-      }
+      await doMove({ contactId, fromStage, toStage: stage });
     });
 
     // Cards
@@ -384,3 +382,18 @@ if (filterEl) {
 }
 
 load();
+
+if (trashDropEl) {
+  trashDropEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    trashDropEl.classList.add('over');
+  });
+  trashDropEl.addEventListener('dragleave', () => trashDropEl.classList.remove('over'));
+  trashDropEl.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    trashDropEl.classList.remove('over');
+    const contactId = e.dataTransfer ? e.dataTransfer.getData('text/plain') : '';
+    const fromStage = e.dataTransfer ? e.dataTransfer.getData('text/x-kanban-from') : '';
+    await doMove({ contactId, fromStage, toStage: LOST_STAGE });
+  });
+}

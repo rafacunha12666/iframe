@@ -48,6 +48,12 @@ body {
   align-items: center;
 }
 
+.filterStack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 input[type='search'] {
   width: min(440px, 62vw);
   appearance: none;
@@ -69,6 +75,41 @@ input[type='search']::placeholder {
 input[type='search']:focus {
   border-color: rgba(255, 255, 255, 0.45);
   background: rgba(0, 0, 0, 0.22);
+}
+
+.trashDrop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 0, 64, 0.18);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+  user-select: none;
+}
+
+.trashDrop:hover {
+  background: rgba(255, 0, 64, 0.24);
+}
+
+.trashDrop.over {
+  outline: 3px solid rgba(255, 255, 255, 0.35);
+  outline-offset: -6px;
+  background: rgba(255, 0, 64, 0.34);
+}
+
+.trashIcon {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.trashText {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
 }
 
 button {

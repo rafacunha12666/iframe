@@ -10,14 +10,43 @@
     <header class="top">
       <h1>Kanban Board</h1>
       <div class="topRight">
-        <input
-          id="filter"
-          type="search"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="Filtrar por nome, contact id, chat id..."
-          aria-label="Filtrar cards"
-        />
+        <div class="filterStack">
+          <input
+            id="filter"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Filtrar por nome, contact id, chat id..."
+            aria-label="Filtrar cards"
+          />
+          <div
+            id="trashDrop"
+            class="trashDrop"
+            role="button"
+            tabindex="0"
+            aria-label="Arraste aqui para marcar como Venda Perdida"
+            title="Arraste um card aqui para mover para Venda Perdida"
+          >
+            <svg
+              class="trashIcon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M9 3h6m-8 4h10m-9 0 .9 14h6.2L16 7M10 11v7m4-7v7"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span class="trashText">Venda perdida</span>
+          </div>
+        </div>
         <button id="refresh" type="button">Atualizar</button>
       </div>
     </header>
