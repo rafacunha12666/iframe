@@ -75,7 +75,7 @@ const toLabelName = (stage) => {
   // Prefer using the original stage if it already matches Chatwoot label rules.
   // (UI docs mention: alphabets, numbers, hyphens, underscores)
   if (/^[A-Za-z0-9_-]+$/.test(raw)) {
-    return raw;
+    return raw.toLowerCase();
   }
 
   // Fallback: normalize to ascii + underscores.
@@ -85,7 +85,7 @@ const toLabelName = (stage) => {
     .replace(/[^A-Za-z0-9_-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '');
-  return ascii || 'sem_funil';
+  return (ascii || 'sem_funil').toLowerCase();
 };
 
 const uniqStrings = (arr) => {
@@ -113,25 +113,14 @@ const mergeLabels = ({ current, add, remove }) => {
   return Array.from(set);
 };
 
-const pickConversationIdsForContact = (payload) => {
+const listConversationIdsForContact = (payload, maxCount) => {
   const list = Array.isArray(payload) ? payload : [];
-  const convs = list
-    .map((c) => {
-      const id = c && c.id;
-      if (id === null || id === undefined) return null;
-      const status = c && c.status;
-      const updatedAt = Number(c && (c.updated_at || c.last_activity_at || c.created_at)) || 0;
-      return { id: Number(id), status: String(status || ''), updatedAt };
-    })
-    .filter(Boolean);
-
-  const open = convs
-    .filter((c) => c.status && c.status !== 'resolved')
-    .sort((a, b) => b.updatedAt - a.updatedAt);
-  const allSorted = convs.slice().sort((a, b) => b.updatedAt - a.updatedAt);
-
-  const chosen = open.length ? open.slice(0, 5) : allSorted.slice(0, 1);
-  return uniqStrings(chosen.map((c) => String(c.id)));
+  const ids = uniqStrings(
+    list
+      .map((c) => (c && c.id !== null && c.id !== undefined ? String(c.id) : null))
+      .filter(Boolean)
+  );
+  return ids.slice(0, Math.max(1, Number(maxCount) || 50));
 };
 
 app.get('/health', (req, res) => {
@@ -334,8 +323,9 @@ app.put('/api/contacts/:id/move', async (req, res) => {
         contactId
       )}/conversations`
     );
-    const conversationIds = pickConversationIdsForContact(
-      convs && Array.isArray(convs.payload) ? convs.payload : []
+    const conversationIds = listConversationIdsForContact(
+      convs && Array.isArray(convs.payload) ? convs.payload : [],
+      req.query.max_conversations || 50
     );
 
     const updatedConversations = [];
