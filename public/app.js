@@ -223,7 +223,17 @@ const render = () => {
       render();
 
       try {
-        await moveContactServer(contactId, stage);
+        await fetch(`/api/contacts/${encodeURIComponent(contactId)}/move`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ stage, previousStage: fromStage }),
+        }).then(async (r) => {
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw new Error(b && b.error ? b.error : `Erro (${r.status})`);
+          }
+          return b;
+        });
         setStatus(`Atualizado: ${new Date().toLocaleString()}`);
       } catch (err) {
         setContactStageLocal(contactId, previous === 'Sem funil' ? null : previous);
@@ -342,4 +352,3 @@ if (filterEl) {
 }
 
 load();
-

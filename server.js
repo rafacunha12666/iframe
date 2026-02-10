@@ -88,6 +88,52 @@ const toLabelName = (stage) => {
   return ascii || 'sem_funil';
 };
 
+const uniqStrings = (arr) => {
+  const out = [];
+  const seen = new Set();
+  for (const v of arr || []) {
+    const s = String(v);
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+};
+
+const mergeLabels = ({ current, add, remove }) => {
+  const set = new Set((current || []).map((s) => String(s)));
+  const addLabel = String(add || '').trim();
+  const removeLabel = String(remove || '').trim();
+  if (removeLabel && removeLabel !== addLabel) {
+    set.delete(removeLabel);
+  }
+  if (addLabel) {
+    set.add(addLabel);
+  }
+  return Array.from(set);
+};
+
+const pickConversationIdsForContact = (payload) => {
+  const list = Array.isArray(payload) ? payload : [];
+  const convs = list
+    .map((c) => {
+      const id = c && c.id;
+      if (id === null || id === undefined) return null;
+      const status = c && c.status;
+      const updatedAt = Number(c && (c.updated_at || c.last_activity_at || c.created_at)) || 0;
+      return { id: Number(id), status: String(status || ''), updatedAt };
+    })
+    .filter(Boolean);
+
+  const open = convs
+    .filter((c) => c.status && c.status !== 'resolved')
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const allSorted = convs.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const chosen = open.length ? open.slice(0, 5) : allSorted.slice(0, 1);
+  return uniqStrings(chosen.map((c) => String(c.id)));
+};
+
 app.get('/health', (req, res) => {
   res.status(200).send('ok');
 });
@@ -238,12 +284,18 @@ app.put('/api/contacts/:id/move', async (req, res) => {
   const contactId = String(req.params.id || '').trim();
   const stage = (req.body && req.body.stage !== undefined ? String(req.body.stage) : '')
     .trim();
+  const previousStage = (
+    req.body && req.body.previousStage !== undefined ? String(req.body.previousStage) : ''
+  ).trim();
   if (!contactId) {
     res.status(400).json({ error: 'Missing contact id' });
     return;
   }
 
   try {
+    const nextLabel = toLabelName(stage || 'Sem funil');
+    const prevLabel = previousStage ? toLabelName(previousStage) : '';
+
     // 1) Update funnel custom attribute.
     await chatwootFetchJson(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
@@ -258,16 +310,13 @@ app.put('/api/contacts/:id/move', async (req, res) => {
     );
 
     // 2) Ensure a contact label exists matching the funnel stage (normalized).
-    const label = toLabelName(stage || 'Sem funil');
     const existing = await chatwootFetchJson(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
         contactId
       )}/labels`
     );
     const current = existing && Array.isArray(existing.payload) ? existing.payload : [];
-    const set = new Set(current.map((s) => String(s)));
-    set.add(label);
-    const merged = Array.from(set);
+    const merged = mergeLabels({ current, add: nextLabel, remove: prevLabel });
 
     const updated = await chatwootFetchJson(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
@@ -279,11 +328,52 @@ app.put('/api/contacts/:id/move', async (req, res) => {
       }
     );
 
+    // 3) Apply the same label to the most relevant conversation(s) of this contact.
+    const convs = await chatwootFetchJson(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
+        contactId
+      )}/conversations`
+    );
+    const conversationIds = pickConversationIdsForContact(
+      convs && Array.isArray(convs.payload) ? convs.payload : []
+    );
+
+    const updatedConversations = [];
+    for (const conversationId of conversationIds) {
+      const existingConv = await chatwootFetchJson(
+        `/api/v1/accounts/${encodeURIComponent(accountId)}/conversations/${encodeURIComponent(
+          conversationId
+        )}/labels`
+      );
+      const currentConv =
+        existingConv && Array.isArray(existingConv.payload) ? existingConv.payload : [];
+      const mergedConv = mergeLabels({
+        current: currentConv,
+        add: nextLabel,
+        remove: prevLabel,
+      });
+
+      const updatedConv = await chatwootFetchJson(
+        `/api/v1/accounts/${encodeURIComponent(accountId)}/conversations/${encodeURIComponent(
+          conversationId
+        )}/labels`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ labels: mergedConv }),
+        }
+      );
+      updatedConversations.push({
+        conversationId,
+        labels: updatedConv && Array.isArray(updatedConv.payload) ? updatedConv.payload : mergedConv,
+      });
+    }
+
     res.status(200).json({
       ok: true,
       stage: stage || null,
-      label,
+      label: nextLabel,
       labels: updated && Array.isArray(updated.payload) ? updated.payload : merged,
+      conversations: updatedConversations,
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message, data: err.data || null });
