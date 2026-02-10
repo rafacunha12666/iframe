@@ -24,6 +24,19 @@ const normalizeStageValue = (stage) => {
   return raw || 'Sem funil';
 };
 
+const toLabelSlug = (stageValue) => {
+  const raw = String(stageValue || '').trim();
+  if (!raw) return 'sem_funil';
+  if (/^[A-Za-z0-9_-]+$/.test(raw)) return raw.toLowerCase();
+  const ascii = raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return (ascii || 'sem_funil').toLowerCase();
+};
+
 const chatwootFetchJson = async (pathname, init) => {
   const url = new URL(pathname, BASE_URL);
   const res = await fetch(url, {
@@ -166,7 +179,7 @@ async function main() {
   }
 
   const targetStage = 'Análise';
-  const expectedLabel = normalizeStageValue(targetStage);
+  const expectedLabel = toLabelSlug(normalizeStageValue(targetStage));
   console.log(`\nMOVE -> "${targetStage}" (expect label "${expectedLabel}")`);
 
   const server2 = await startLocalServer(port);

@@ -14,14 +14,39 @@ const toNonEmptyString = (v) => {
 
 const normalizeStage = (v) => toNonEmptyString(v) || 'Sem funil';
 
-const stageColorClass = (stage) => {
-  const s = String(stage || '').toLowerCase();
-  if (s.includes('novo') || s.includes('backlog') || s.includes('inicial')) return 'c1';
-  if (s.includes('analise') || s.includes('qual') || s.includes('doing')) return 'c2';
-  if (s.includes('proposta') || s.includes('review') || s.includes('negoci')) return 'c3';
-  if (s.includes('ganh') || s.includes('done') || s.includes('assin')) return 'c4';
-  if (s.includes('perdid')) return 'c5';
-  return 'c0';
+const toLabelSlug = (stageValue) => {
+  const raw = String(stageValue || '').trim();
+  if (!raw) return 'sem_funil';
+  if (/^[A-Za-z0-9_-]+$/.test(raw)) return raw.toLowerCase();
+  const ascii = raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return (ascii || 'sem_funil').toLowerCase();
+};
+
+const LABEL_COLORS = {
+  analise: '#FBAF0C',
+  assinatura: '#D82DFB',
+  contato_inicial: '#3E7FD0',
+  fundo_de_funil: '#EDF654',
+  negociacao: '#C0BABA',
+  venda_ganha: '#10B636',
+  venda_perdida: '#0F0F0F',
+  sem_funil: '#C0BABA',
+};
+
+const isDarkColor = (hex) => {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return false;
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  // Relative luminance
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum < 0.45;
 };
 
 const readColOrder = () => {
@@ -163,9 +188,16 @@ const render = () => {
     col.setAttribute('data-stage', stage);
 
     const header = document.createElement('div');
-    header.className = `colHeader ${stageColorClass(stage)}`;
+    header.className = 'colHeader';
     header.setAttribute('data-stage', stage);
     header.setAttribute('draggable', 'true');
+    const slug = toLabelSlug(stage);
+    const color = LABEL_COLORS[slug] || 'rgba(255, 255, 255, 0.25)';
+    header.style.setProperty('--col-bg', color);
+    header.style.setProperty('--col-fg', isDarkColor(color) ? '#fff' : '#0b0d10');
+    if (isDarkColor(color)) {
+      header.classList.add('colDark');
+    }
     header.innerHTML = `<div class="colTitle"><span>${stage}</span><span class="count">${list.length}</span></div>`;
 
     const body = document.createElement('div');

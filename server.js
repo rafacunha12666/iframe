@@ -71,6 +71,24 @@ const normalizeStageValue = (stage) => {
   return raw || 'Sem funil';
 };
 
+// Chatwoot label names: letters/numbers/_/-. Prefer lower_snake.
+const toLabelSlug = (stageValue) => {
+  const raw = String(stageValue || '').trim();
+  if (!raw) {
+    return 'sem_funil';
+  }
+  if (/^[A-Za-z0-9_-]+$/.test(raw)) {
+    return raw.toLowerCase();
+  }
+  const ascii = raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return (ascii || 'sem_funil').toLowerCase();
+};
+
 const uniqStrings = (arr) => {
   const out = [];
   const seen = new Set();
@@ -93,7 +111,7 @@ const setOnlyLabel = async ({ accountId, type, id, label }) => {
           id
         )}/labels`;
 
-  // Overwrite labels: the conversation must have exactly one label equal to funil_de_vendas.
+  // Overwrite labels: the conversation/contact must have exactly one label.
   return chatwootFetchJson(endpoint, {
     method: 'POST',
     body: JSON.stringify({ labels: [label] }),
@@ -271,8 +289,8 @@ app.put('/api/contacts/:id/move', async (req, res) => {
   try {
     const stageValue = normalizeStageValue(stage);
     const prevStageValue = previousStage ? normalizeStageValue(previousStage) : '';
-    const nextLabel = stageValue;
-    const prevLabel = prevStageValue;
+    const nextLabel = toLabelSlug(stageValue);
+    const prevLabel = toLabelSlug(prevStageValue);
 
     // 1) Update funnel custom attribute.
     await chatwootFetchJson(
@@ -335,6 +353,7 @@ app.put('/api/contacts/:id/move', async (req, res) => {
     if (previousStage) {
       try {
         const prevStageValue = normalizeStageValue(previousStage);
+        const prevLabel = toLabelSlug(prevStageValue);
         await chatwootFetchJson(
           `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
             contactId
@@ -350,7 +369,7 @@ app.put('/api/contacts/:id/move', async (req, res) => {
           accountId,
           type: 'contact',
           id: contactId,
-          label: prevStageValue,
+          label: prevLabel,
         });
         const convs = await chatwootFetchJson(
           `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
@@ -366,7 +385,7 @@ app.put('/api/contacts/:id/move', async (req, res) => {
             accountId,
             type: 'conversation',
             id: conversationId,
-            label: prevStageValue,
+            label: prevLabel,
           });
         }
       } catch {
