@@ -1,11 +1,26 @@
+if (process.env.NODE_ENV !== 'production') {
+  // Local-only: Railway provides env vars via dashboard; don't rely on .env in prod.
+  require('dotenv').config();
+}
+
 const express = require('express');
 const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const startedAt = new Date().toISOString();
 
 app.use(express.json({ limit: '256kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    etag: true,
+    maxAge: 0,
+    setHeaders(res) {
+      // Avoid stale iframe assets when deploying frequently.
+      res.setHeader('Cache-Control', 'no-store');
+    },
+  })
+);
 
 const getChatwootConfig = () => {
   const baseUrl =
@@ -53,6 +68,22 @@ const chatwootFetchJson = async (pathname, init) => {
 
 app.get('/health', (req, res) => {
   res.status(200).send('ok');
+});
+
+app.get('/api/version', (req, res) => {
+  res.json({
+    startedAt,
+    node: process.version,
+    app: {
+      name: 'chatwoot-dashboard-app',
+      version: '1.0.0',
+    },
+    git: {
+      railway: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+      github: process.env.GITHUB_SHA || null,
+      vercel: process.env.VERCEL_GIT_COMMIT_SHA || null,
+    },
+  });
 });
 
 app.get('/api/config', (req, res) => {
@@ -150,4 +181,3 @@ app.put('/api/contacts/:id/funil', async (req, res) => {
 app.listen(port, () => {
   console.log(`Chatwoot app listening on ${port}`);
 });
-

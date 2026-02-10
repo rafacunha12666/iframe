@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "chatwoot-dashboard-app",
   "version": "1.0.0",
   "private": true,
@@ -8,6 +8,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "dotenv": "^17.2.4",
     "express": "^4.19.2"
   }
 }
