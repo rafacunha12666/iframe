@@ -1,87 +1,27 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chatwoot App Simples</title>
+    <title>Kanban Board</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <main class="card">
-      <header class="header">
-        <div class="dot"></div>
-        <div>
-          <h1>Chatwoot App</h1>
-          <p>Conteudo fixo para qualquer contato</p>
-        </div>
-      </header>
+    <header class="top">
+      <h1>Kanban Board</h1>
+      <div class="topRight">
+        <button id="refresh" type="button">Atualizar</button>
+      </div>
+    </header>
 
-      <section class="content">
-        <div class="block">
-          <h2>Status</h2>
-          <p>postmessage (Chatwoot)</p>
-          <pre id="postMessagePayload">(aguardando)</pre>
-          <p class="muted" id="postMessageHint"></p>
-        </div>
+    <section class="meta">
+      <div id="status" class="status"></div>
+      <div id="error" class="error" aria-live="polite"></div>
+    </section>
 
-        <div class="block">
-          <div class="row">
-            <h2>Kanban (funil_de_vendas)</h2>
-            <div class="actions">
-              <input id="kanbanSearch" type="search" placeholder="Filtrar por id/nome..." />
-              <button id="clearBoardBtn" class="btn-secondary" type="button">
-                Limpar board
-              </button>
-            </div>
-          </div>
-          <p class="muted">
-            Mostra contatos vistos via postMessage e agrupa por
-            <code>custom_attributes.funil_de_vendas</code>. Arraste cards entre colunas
-            (salva localmente).
-          </p>
-          <p class="muted" id="kanbanSyncStatus"></p>
-          <p class="muted" id="kanbanError"></p>
-          <div id="kanbanBoard" class="kanban" aria-label="Kanban funil de vendas"></div>
-        </div>
-
-        <div class="block">
-          <h2>Dados</h2>
-          <div class="kv">
-            <span>contact.id</span><strong id="contactId">Nao informado</strong>
-            <span>contact.email</span><strong id="contactEmail">Nao informado</strong>
-            <span>contact.phone_number</span><strong id="contactPhone">Nao informado</strong>
-            <span>contact.avatar_url</span><strong id="contactAvatar">Nao informado</strong>
-            <span>conversation.id</span><strong id="conversationId">Nao informado</strong>
-            <span>conversation.status</span><strong id="conversationStatus">Nao informado</strong>
-            <span>conversation.inbox_id</span><strong id="conversationInboxId">Nao informado</strong>
-            <span>account.id</span><strong id="accountId">Nao informado</strong>
-            <span>inbox.id</span><strong id="inboxId">Nao informado</strong>
-            <span>custom_attributes</span><strong id="contactCustomAttributes">Nao informado</strong>
-            <span>labels/tags</span><strong id="contactLabels">Nao informado</strong>
-          </div>
-        </div>
-
-        <div class="block">
-          <h2>Mensagem</h2>
-          <p>Contato selecionado: <strong id="contactName">Nao informado</strong></p>
-        </div>
-
-        <div class="block">
-          <h2>Canvas</h2>
-          <p class="muted">Prévia visual do contato</p>
-          <canvas id="contactCanvas" width="320" height="160">
-            Seu navegador não suporta canvas.
-          </canvas>
-        </div>
-
-        <div class="block">
-          <h2>Acoes</h2>
-          <button id="pingBtn">Ping</button>
-          <span id="pingResult" aria-live="polite"></span>
-        </div>
-      </section>
-    </main>
+    <main id="board" class="board" aria-label="Board funil de vendas"></main>
 
     <script src="/app.js"></script>
   </body>
 </html>
+
