@@ -66,26 +66,9 @@ const chatwootFetchJson = async (pathname, init) => {
   return data;
 };
 
-const toLabelName = (stage) => {
+const normalizeStageValue = (stage) => {
   const raw = String(stage || '').trim();
-  if (!raw) {
-    return 'sem_funil';
-  }
-
-  // Prefer using the original stage if it already matches Chatwoot label rules.
-  // (UI docs mention: alphabets, numbers, hyphens, underscores)
-  if (/^[A-Za-z0-9_-]+$/.test(raw)) {
-    return raw.toLowerCase();
-  }
-
-  // Fallback: normalize to ascii + underscores.
-  const ascii = raw
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return (ascii || 'sem_funil').toLowerCase();
+  return raw || 'Sem funil';
 };
 
 const uniqStrings = (arr) => {
@@ -100,17 +83,21 @@ const uniqStrings = (arr) => {
   return out;
 };
 
-const mergeLabels = ({ current, add, remove }) => {
-  const set = new Set((current || []).map((s) => String(s)));
-  const addLabel = String(add || '').trim();
-  const removeLabel = String(remove || '').trim();
-  if (removeLabel && removeLabel !== addLabel) {
-    set.delete(removeLabel);
-  }
-  if (addLabel) {
-    set.add(addLabel);
-  }
-  return Array.from(set);
+const setOnlyLabel = async ({ accountId, type, id, label }) => {
+  const endpoint =
+    type === 'contact'
+      ? `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
+          id
+        )}/labels`
+      : `/api/v1/accounts/${encodeURIComponent(accountId)}/conversations/${encodeURIComponent(
+          id
+        )}/labels`;
+
+  // Overwrite labels: the conversation must have exactly one label equal to funil_de_vendas.
+  return chatwootFetchJson(endpoint, {
+    method: 'POST',
+    body: JSON.stringify({ labels: [label] }),
+  });
 };
 
 const listConversationIdsForContact = (payload, maxCount) => {
@@ -282,8 +269,10 @@ app.put('/api/contacts/:id/move', async (req, res) => {
   }
 
   try {
-    const nextLabel = toLabelName(stage || 'Sem funil');
-    const prevLabel = previousStage ? toLabelName(previousStage) : '';
+    const stageValue = normalizeStageValue(stage);
+    const prevStageValue = previousStage ? normalizeStageValue(previousStage) : '';
+    const nextLabel = stageValue;
+    const prevLabel = prevStageValue;
 
     // 1) Update funnel custom attribute.
     await chatwootFetchJson(
@@ -293,29 +282,18 @@ app.put('/api/contacts/:id/move', async (req, res) => {
       {
         method: 'PUT',
         body: JSON.stringify({
-          custom_attributes: { funil_de_vendas: stage || null },
+          custom_attributes: { funil_de_vendas: stageValue },
         }),
       }
     );
 
-    // 2) Ensure a contact label exists matching the funnel stage (normalized).
-    const existing = await chatwootFetchJson(
-      `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
-        contactId
-      )}/labels`
-    );
-    const current = existing && Array.isArray(existing.payload) ? existing.payload : [];
-    const merged = mergeLabels({ current, add: nextLabel, remove: prevLabel });
-
-    const updated = await chatwootFetchJson(
-      `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
-        contactId
-      )}/labels`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ labels: merged }),
-      }
-    );
+    // 2) Contact must have exactly one label equal to funil_de_vendas.
+    const updated = await setOnlyLabel({
+      accountId,
+      type: 'contact',
+      id: contactId,
+      label: nextLabel,
+    });
 
     // 3) Apply the same label to the most relevant conversation(s) of this contact.
     const convs = await chatwootFetchJson(
@@ -330,42 +308,71 @@ app.put('/api/contacts/:id/move', async (req, res) => {
 
     const updatedConversations = [];
     for (const conversationId of conversationIds) {
-      const existingConv = await chatwootFetchJson(
-        `/api/v1/accounts/${encodeURIComponent(accountId)}/conversations/${encodeURIComponent(
-          conversationId
-        )}/labels`
-      );
-      const currentConv =
-        existingConv && Array.isArray(existingConv.payload) ? existingConv.payload : [];
-      const mergedConv = mergeLabels({
-        current: currentConv,
-        add: nextLabel,
-        remove: prevLabel,
+      const updatedConv = await setOnlyLabel({
+        accountId,
+        type: 'conversation',
+        id: conversationId,
+        label: nextLabel,
       });
-
-      const updatedConv = await chatwootFetchJson(
-        `/api/v1/accounts/${encodeURIComponent(accountId)}/conversations/${encodeURIComponent(
-          conversationId
-        )}/labels`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ labels: mergedConv }),
-        }
-      );
       updatedConversations.push({
         conversationId,
-        labels: updatedConv && Array.isArray(updatedConv.payload) ? updatedConv.payload : mergedConv,
+        labels:
+          updatedConv && Array.isArray(updatedConv.payload)
+            ? updatedConv.payload
+            : [nextLabel],
       });
     }
 
     res.status(200).json({
       ok: true,
-      stage: stage || null,
+      stage: stageValue,
       label: nextLabel,
-      labels: updated && Array.isArray(updated.payload) ? updated.payload : merged,
+      labels: updated && Array.isArray(updated.payload) ? updated.payload : [nextLabel],
       conversations: updatedConversations,
     });
   } catch (err) {
+    // Best-effort revert (if provided) to avoid leaving funil and labels inconsistent.
+    if (previousStage) {
+      try {
+        const prevStageValue = normalizeStageValue(previousStage);
+        await chatwootFetchJson(
+          `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
+            contactId
+          )}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              custom_attributes: { funil_de_vendas: prevStageValue },
+            }),
+          }
+        );
+        await setOnlyLabel({
+          accountId,
+          type: 'contact',
+          id: contactId,
+          label: prevStageValue,
+        });
+        const convs = await chatwootFetchJson(
+          `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
+            contactId
+          )}/conversations`
+        );
+        const conversationIds = listConversationIdsForContact(
+          convs && Array.isArray(convs.payload) ? convs.payload : [],
+          req.query.max_conversations || 50
+        );
+        for (const conversationId of conversationIds) {
+          await setOnlyLabel({
+            accountId,
+            type: 'conversation',
+            id: conversationId,
+            label: prevStageValue,
+          });
+        }
+      } catch {
+        // ignore revert errors
+      }
+    }
     res.status(err.status || 500).json({ error: err.message, data: err.data || null });
   }
 });

@@ -19,17 +19,9 @@ const TOKEN = (
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const toLabelName = (stage) => {
+const normalizeStageValue = (stage) => {
   const raw = String(stage || '').trim();
-  if (!raw) return 'sem_funil';
-  if (/^[A-Za-z0-9_-]+$/.test(raw)) return raw.toLowerCase();
-  const ascii = raw
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return (ascii || 'sem_funil').toLowerCase();
+  return raw || 'Sem funil';
 };
 
 const chatwootFetchJson = async (pathname, init) => {
@@ -174,7 +166,7 @@ async function main() {
   }
 
   const targetStage = 'Análise';
-  const expectedLabel = toLabelName(targetStage);
+  const expectedLabel = normalizeStageValue(targetStage);
   console.log(`\nMOVE -> "${targetStage}" (expect label "${expectedLabel}")`);
 
   const server2 = await startLocalServer(port);
@@ -209,15 +201,18 @@ async function main() {
     console.log('CONVERSATIONS labels AFTER');
     let okCount = 0;
     for (const item of after) {
-      const has = item.labels.map(String).includes(expectedLabel);
-      if (has) okCount += 1;
+      const only = item.labels.map(String);
+      const ok = only.length === 1 && only[0] === expectedLabel;
+      if (ok) okCount += 1;
       console.log(
         `- ${item.convId}: ${item.labels.length ? item.labels.join(', ') : '(none)'}${
-          has ? ' [OK]' : ' [MISSING]'
+          ok ? ' [OK]' : ' [NOT-ONLY]'
         }`
       );
     }
-    console.log(`VERIFY label "${expectedLabel}" present in ${okCount}/${after.length} conversations`);
+    console.log(
+      `VERIFY conversations have ONLY "${expectedLabel}": ${okCount}/${after.length}`
+    );
   } finally {
     server2.kill();
   }
