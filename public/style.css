@@ -48,6 +48,29 @@ body {
   align-items: center;
 }
 
+input[type='search'] {
+  width: min(440px, 62vw);
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.16);
+  color: #fff;
+  padding: 11px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  outline: none;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+}
+
+input[type='search']::placeholder {
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 700;
+}
+
+input[type='search']:focus {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(0, 0, 0, 0.22);
+}
+
 button {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -83,6 +106,16 @@ button:disabled {
   font-size: 13px;
 }
 
+.hint {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+}
+
+.hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
 .error {
   color: #ffe6e6;
   font-size: 13px;
@@ -113,6 +146,17 @@ button:disabled {
   padding: 12px 12px 10px;
   border-top-left-radius: var(--radius);
   border-top-right-radius: var(--radius);
+  cursor: grab;
+  user-select: none;
+}
+
+.colHeader:active {
+  cursor: grabbing;
+}
+
+.colHeader.colOver {
+  outline: 3px solid rgba(255, 255, 255, 0.35);
+  outline-offset: -6px;
 }
 
 .colHeader.c0 {
@@ -171,6 +215,10 @@ button:disabled {
   gap: 12px;
 }
 
+.colBody.dropOver {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .card {
   background: var(--card);
   color: var(--text);
@@ -178,6 +226,21 @@ button:disabled {
   padding: 12px 12px 10px;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
   border: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  user-select: none;
+}
+
+.card[draggable='true'] {
+  cursor: grab;
+}
+
+.card[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.card.pending {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .cardName {
@@ -193,6 +256,35 @@ button:disabled {
   font-weight: 700;
 }
 
+.cardDetails {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.15);
+  display: none;
+  gap: 6px;
+}
+
+.card.expanded .cardDetails {
+  display: grid;
+}
+
+.cardDetailsLabel {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  color: rgba(0, 0, 0, 0.55);
+  text-transform: uppercase;
+}
+
+.cardDetailsText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(0, 0, 0, 0.78);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 720px) {
   .board {
     gap: 14px;
@@ -203,4 +295,3 @@ button:disabled {
     min-height: 70vh;
   }
 }
-

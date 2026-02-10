@@ -10,12 +10,23 @@
     <header class="top">
       <h1>Kanban Board</h1>
       <div class="topRight">
+        <input
+          id="filter"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Filtrar por nome, contact id, chat id..."
+          aria-label="Filtrar cards"
+        />
         <button id="refresh" type="button">Atualizar</button>
       </div>
     </header>
 
     <section class="meta">
       <div id="status" class="status"></div>
+      <div class="hint">
+        `chat id` = `identifier` ou `source_id` (contact_inboxes) quando existir.
+      </div>
       <div id="error" class="error" aria-live="polite"></div>
     </section>
 
@@ -24,4 +35,3 @@
     <script src="/app.js"></script>
   </body>
 </html>
-

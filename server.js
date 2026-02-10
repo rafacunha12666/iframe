@@ -66,6 +66,28 @@ const chatwootFetchJson = async (pathname, init) => {
   return data;
 };
 
+const toLabelName = (stage) => {
+  const raw = String(stage || '').trim();
+  if (!raw) {
+    return 'sem_funil';
+  }
+
+  // Prefer using the original stage if it already matches Chatwoot label rules.
+  // (UI docs mention: alphabets, numbers, hyphens, underscores)
+  if (/^[A-Za-z0-9_-]+$/.test(raw)) {
+    return raw;
+  }
+
+  // Fallback: normalize to ascii + underscores.
+  const ascii = raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return ascii || 'sem_funil';
+};
+
 app.get('/health', (req, res) => {
   res.status(200).send('ok');
 });
@@ -150,8 +172,15 @@ app.get('/api/contacts', async (req, res) => {
     const simplified = all.map((c) => ({
       id: c && c.id,
       name: c && (c.name || c.identifier || null),
+      identifier: c && c.identifier,
       email: c && c.email,
       phone_number: c && c.phone_number,
+      contact_inboxes: Array.isArray(c && c.contact_inboxes)
+        ? c.contact_inboxes.map((ci) => ({
+            source_id: ci && ci.source_id,
+            inbox_id: ci && ci.inbox && ci.inbox.id,
+          }))
+        : [],
       custom_attributes: (c && c.custom_attributes) || {},
       updated_at: c && c.updated_at,
     }));
@@ -192,6 +221,70 @@ app.put('/api/contacts/:id/funil', async (req, res) => {
       }
     );
     res.status(200).json({ ok: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, data: err.data || null });
+  }
+});
+
+app.put('/api/contacts/:id/move', async (req, res) => {
+  const { accountId, apiAccessToken } = getChatwootConfig();
+  if (!accountId || !apiAccessToken) {
+    res.status(400).json({
+      error: 'Missing CHATWOOT_ACCOUNT_ID and/or CHATWOOT_API_ACCESS_TOKEN',
+    });
+    return;
+  }
+
+  const contactId = String(req.params.id || '').trim();
+  const stage = (req.body && req.body.stage !== undefined ? String(req.body.stage) : '')
+    .trim();
+  if (!contactId) {
+    res.status(400).json({ error: 'Missing contact id' });
+    return;
+  }
+
+  try {
+    // 1) Update funnel custom attribute.
+    await chatwootFetchJson(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
+        contactId
+      )}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          custom_attributes: { funil_de_vendas: stage || null },
+        }),
+      }
+    );
+
+    // 2) Ensure a contact label exists matching the funnel stage (normalized).
+    const label = toLabelName(stage || 'Sem funil');
+    const existing = await chatwootFetchJson(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
+        contactId
+      )}/labels`
+    );
+    const current = existing && Array.isArray(existing.payload) ? existing.payload : [];
+    const set = new Set(current.map((s) => String(s)));
+    set.add(label);
+    const merged = Array.from(set);
+
+    const updated = await chatwootFetchJson(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts/${encodeURIComponent(
+        contactId
+      )}/labels`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ labels: merged }),
+      }
+    );
+
+    res.status(200).json({
+      ok: true,
+      stage: stage || null,
+      label,
+      labels: updated && Array.isArray(updated.payload) ? updated.payload : merged,
+    });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message, data: err.data || null });
   }
