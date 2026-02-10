@@ -110,7 +110,8 @@ app.get('/api/contacts', async (req, res) => {
 
   try {
     const all = [];
-    for (let page = 1; page <= maxPages; page++) {
+    let page = 1;
+    while (page <= maxPages) {
       const qs = new URLSearchParams();
       qs.set('page', String(page));
       qs.set('per_page', String(perPage));
@@ -122,10 +123,28 @@ app.get('/api/contacts', async (req, res) => {
         `/api/v1/accounts/${encodeURIComponent(accountId)}/contacts?${qs.toString()}`
       );
       const payload = data && Array.isArray(data.payload) ? data.payload : [];
+      const meta = data && typeof data.meta === 'object' ? data.meta : null;
       all.push(...payload);
-      if (payload.length < perPage) {
+
+      // Prefer explicit pagination metadata if present. Chatwoot may return fewer
+      // than per_page while still having more pages.
+      if (meta && Number.isFinite(meta.current_page) && Number.isFinite(meta.total_pages)) {
+        if (meta.current_page >= meta.total_pages) {
+          break;
+        }
+        page = meta.current_page + 1;
+        continue;
+      }
+      if (meta && Number.isFinite(meta.next_page) && meta.next_page) {
+        page = meta.next_page;
+        continue;
+      }
+
+      // Fallback when no pagination metadata exists.
+      if (payload.length === 0) {
         break;
       }
+      page += 1;
     }
 
     const simplified = all.map((c) => ({
