@@ -21,10 +21,17 @@ const contactCanvasCtx = contactCanvas ? contactCanvas.getContext('2d') : null;
 const kanbanBoardEl = document.getElementById('kanbanBoard');
 const clearBoardBtn = document.getElementById('clearBoardBtn');
 const kanbanSearchEl = document.getElementById('kanbanSearch');
+const kanbanSyncStatusEl = document.getElementById('kanbanSyncStatus');
+const kanbanErrorEl = document.getElementById('kanbanError');
 
-const allowedOrigins = new Set([
-  'https://app.chatwoot.com',
-]);
+const allowedOrigins = new Set(['https://app.chatwoot.com']);
+try {
+  if (document.referrer) {
+    allowedOrigins.add(new URL(document.referrer).origin);
+  }
+} catch (err) {
+  // ignore
+}
 
 const STORAGE_KEY = 'kanban_funil_de_vendas_v1';
 
@@ -70,6 +77,8 @@ const saveBoardState = (state) => {
 
 let boardState = loadBoardState();
 let kanbanFilter = '';
+let lastSyncAt = null;
+let isSyncing = false;
 
 const getInitials = (name) => {
   if (!name || typeof name !== 'string') {
@@ -317,6 +326,27 @@ const normalizePayload = (payload) => {
   return payload;
 };
 
+const setKanbanStatus = () => {
+  if (!kanbanSyncStatusEl) {
+    return;
+  }
+  const parts = [];
+  if (isSyncing) {
+    parts.push('Sincronizando...');
+  }
+  if (lastSyncAt) {
+    parts.push(`Ultima sincronizacao: ${new Date(lastSyncAt).toLocaleString()}`);
+  }
+  kanbanSyncStatusEl.textContent = parts.join(' | ');
+};
+
+const setKanbanError = (msg) => {
+  if (!kanbanErrorEl) {
+    return;
+  }
+  kanbanErrorEl.textContent = msg || '';
+};
+
 const extractContactId = (normalized) => {
   const contact =
     normalized.contact ||
@@ -373,8 +403,8 @@ const upsertKanbanContact = (normalized) => {
   const stageFromPayload = extractFunilStage(normalized);
   const existing = boardState.contacts[id] || {};
 
-  // If the user dragged the card before, keep that stage; otherwise use payload stage.
-  const stage = toNonEmptyString(existing.stage) || stageFromPayload || 'Sem funil';
+  // Prefer server-synced stage; fallback to current payload.
+  const stage = stageFromPayload || toNonEmptyString(existing.stage) || 'Sem funil';
 
   boardState.contacts[id] = {
     id,
@@ -514,6 +544,48 @@ const renderKanban = () => {
   }
 };
 
+const syncContactsFromServer = async () => {
+  isSyncing = true;
+  setKanbanStatus();
+  setKanbanError('');
+  try {
+    const res = await fetch('/api/contacts');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error((data && data.error) || `Falha ao buscar contatos (${res.status})`);
+    }
+    const list = data && Array.isArray(data.contacts) ? data.contacts : [];
+    const next = { contacts: {} };
+    for (const c of list) {
+      if (!c || c.id === null || c.id === undefined) {
+        continue;
+      }
+      const id = String(c.id);
+      const stage =
+        toNonEmptyString(
+          c.custom_attributes &&
+            (c.custom_attributes.funil_de_vendas ||
+              c.custom_attributes['funil_de_vendas'])
+        ) || 'Sem funil';
+      next.contacts[id] = {
+        id,
+        name: toNonEmptyString(c.name) || null,
+        stage,
+        updatedAt: Date.now(),
+      };
+    }
+    boardState = next;
+    saveBoardState(boardState);
+    lastSyncAt = Date.now();
+  } catch (err) {
+    setKanbanError(err && err.message ? err.message : 'Erro ao sincronizar');
+  } finally {
+    isSyncing = false;
+    setKanbanStatus();
+    renderKanban();
+  }
+};
+
 const updateFields = (payload) => {
   const normalized = normalizePayload(payload);
   const contact =
@@ -574,13 +646,15 @@ const updateFields = (payload) => {
   );
 };
 
-const initialName = readNameFromQuery();
+  const initialName = readNameFromQuery();
 if (initialName) {
   setContactName(initialName);
 }
 
 drawCanvas();
 renderKanban();
+setKanbanStatus();
+syncContactsFromServer();
 
 window.addEventListener('message', (event) => {
   if (event.origin && !allowedOrigins.has(event.origin)) {

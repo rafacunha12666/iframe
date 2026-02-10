@@ -63,6 +63,11 @@ p {
   font-size: 12px;
 }
 
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
 .content {
   display: grid;
   gap: 16px;
